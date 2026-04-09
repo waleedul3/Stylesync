@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { HexColorPicker } from 'react-colorful';
 import { Lock, LockKeyhole } from 'lucide-react';
 import { useTokenStore } from '../../store/useTokenStore';
-import { firestoreService } from '../../lib/firestoreService';
+import { localHistory } from '../../lib/localHistory';
 
 const COLOR_KEYS = ['primary', 'secondary', 'accent', 'background', 'text'] as const;
 
@@ -26,16 +26,16 @@ export default function ColorPicker() {
 
   if (!tokens) return null;
 
-  const handleLockToggle = async (key: string) => {
+  const handleLockToggle = (key: string) => {
     const path = `colors.${key}`;
     if (!sessionId) return;
     if (lockedPaths.includes(path)) {
       removeLockedPath(path);
-      await firestoreService.unlockToken(sessionId, path).catch(() => {});
+      localHistory.addEntry(sessionId, path, null, 'unlocked', 'unlocked');
     } else {
       const value = (tokens.colors as any)[key] as string;
       addLockedPath(path);
-      await firestoreService.lockToken(sessionId, path, value).catch(() => {});
+      localHistory.addEntry(sessionId, path, value, value, 'locked');
     }
   };
 

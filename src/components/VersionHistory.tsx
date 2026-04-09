@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { History, ChevronDown, ChevronUp, RotateCcw, Clock } from 'lucide-react';
-import { firestoreService } from '../lib/firestoreService';
+import { localHistory } from '../lib/localHistory';
 import { useTokenStore } from '../store/useTokenStore';
 import type { VersionEntry } from '../types';
 
@@ -31,36 +31,34 @@ const changeTypeBadges: Record<string, { bg: string; text: string }> = {
 
 export default function VersionHistory() {
   const sessionId = useTokenStore((s) => s.sessionId);
-  const tokenDocId = useTokenStore((s) => s.tokenDocId);
+  const tokens = useTokenStore((s) => s.tokens);
+  const updateColor = useTokenStore((s) => s.updateColor);
+  const updateTypography = useTokenStore((s) => s.updateTypography);
+  const updateSpacing = useTokenStore((s) => s.updateSpacing);
   const [entries, setEntries] = useState<VersionEntry[]>([]);
   const [isOpen, setIsOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
 
+  const loadHistory = useCallback(() => {
+    if (!sessionId) return;
+    setEntries(localHistory.getAll(sessionId));
+  }, [sessionId]);
+
+  // Load on open, and refresh every 2s when open (picks up new edits)
   useEffect(() => {
-    if (!sessionId || !isOpen) return;
-    setIsLoading(true);
-    firestoreService
-      .getHistory(sessionId)
-      .then((data) => setEntries(data as VersionEntry[]))
-      .catch(console.error)
-      .finally(() => setIsLoading(false));
-  }, [sessionId, isOpen]);
+    if (!isOpen) return;
+    loadHistory();
+    const id = setInterval(loadHistory, 2000);
+    return () => clearInterval(id);
+  }, [isOpen, loadHistory]);
 
-  const handleRestore = async (entry: VersionEntry) => {
-    if (!sessionId || !tokenDocId || !entry.previousValue) return;
-    try {
-      await firestoreService.updateToken(
-        sessionId,
-        tokenDocId,
-        entry.tokenPath,
-        entry.previousValue,
-        entry.newValue
-      );
-      const data = await firestoreService.getHistory(sessionId);
-      setEntries(data as VersionEntry[]);
-    } catch (err) {
-      console.error('Failed to restore:', err);
-    }
+  const handleRestore = (entry: VersionEntry) => {
+    if (!entry.previousValue || entry.changeType !== 'user_edit') return;
+    const [section, key] = entry.tokenPath.split('.');
+    if (section === 'colors') updateColor(key, entry.previousValue);
+    else if (section === 'typography') updateTypography(key, entry.previousValue);
+    else if (section === 'spacing') updateSpacing(key, Number(entry.previousValue));
+    // Immediately refresh list
+    setTimeout(loadHistory, 100);
   };
 
   return (
@@ -126,31 +124,25 @@ export default function VersionHistory() {
               overflowY: 'auto',
               paddingRight: '4px',
             }}>
-              {isLoading ? (
-                <div style={{ textAlign: 'center', padding: '16px' }}>
-                  <div style={{
-                    width: '20px',
-                    height: '20px',
-                    border: '2px solid rgba(99, 102, 241, 0.3)',
-                    borderTopColor: '#6366f1',
-                    borderRadius: '50%',
-                    animation: 'spin 0.8s linear infinite',
-                    margin: '0 auto',
-                  }} />
-                </div>
-              ) : entries.length === 0 ? (
+              {entries.length === 0 ? (
                 <p style={{
                   color: '#52525b',
                   fontSize: '12px',
                   textAlign: 'center',
                   padding: '16px',
                 }}>
-                  No history yet
+                  No history yet — start editing tokens above
                 </p>
               ) : (
                 entries.map((entry, i) => {
                   const badge = changeTypeBadges[entry.changeType] ?? changeTypeBadges.user_edit;
                   const color = changeTypeColors[entry.changeType] ?? '#9ca3af';
+                  let dateObj: Date;
+                  try {
+                    dateObj = entry.changedAt?.toDate ? entry.changedAt.toDate() : new Date();
+                  } catch {
+                    dateObj = new Date();
+                  }
                   return (
                     <motion.div
                       key={entry.id}
@@ -246,9 +238,7 @@ export default function VersionHistory() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
                           <Clock style={{ width: '10px', height: '10px', color: '#52525b' }} />
                           <span style={{ fontSize: '10px', color: '#52525b' }}>
-                            {entry.changedAt?.toDate
-                              ? timeAgo(entry.changedAt.toDate())
-                              : 'just now'}
+                            {timeAgo(dateObj)}
                           </span>
                         </div>
                       </div>

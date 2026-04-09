@@ -1,23 +1,36 @@
 import { create } from 'zustand';
 import type { DesignTokens, ScrapeError } from '../types';
 import { applyTokensToDOM } from '../lib/cssVariables';
-import { firestoreService } from '../lib/firestoreService';
+import { localHistory } from '../lib/localHistory';
+
+// Best-effort Firestore update — fire-and-forget, never throws
+async function tryFirestoreUpdate(
+  sessionId: string,
+  tokenDocId: string | null,
+  path: string,
+  newValue: string | number | number[],
+  previousValue: string | number | number[] | null
+) {
+  if (!tokenDocId) return;
+  try {
+    const { firestoreService } = await import('../lib/firestoreService');
+    await firestoreService.updateToken(sessionId, tokenDocId, path, newValue, previousValue);
+  } catch { /* Firestore unavailable — silently ignore */ }
+}
 
 // Debounce helper
 let debounceTimers: Record<string, ReturnType<typeof setTimeout>> = {};
 function debouncedFirestoreUpdate(
   sessionId: string,
-  tokenDocId: string,
+  tokenDocId: string | null,
   path: string,
   newValue: string | number | number[],
   previousValue: string | number | number[] | null
 ) {
   if (debounceTimers[path]) clearTimeout(debounceTimers[path]);
   debounceTimers[path] = setTimeout(() => {
-    firestoreService
-      .updateToken(sessionId, tokenDocId, path, newValue, previousValue)
-      .catch(console.error);
-  }, 300);
+    tryFirestoreUpdate(sessionId, tokenDocId, path, newValue, previousValue);
+  }, 400);
 }
 
 interface TokenStore {
@@ -58,7 +71,7 @@ export const useTokenStore = create<TokenStore>((set, get) => ({
 
   updateColor: (key, value) => {
     const { tokens, sessionId, tokenDocId, lockedPaths } = get();
-    if (!tokens || !sessionId || !tokenDocId) return;
+    if (!tokens || !sessionId) return;
     const path = `colors.${key}`;
     if (lockedPaths.includes(path)) return;
 
@@ -69,12 +82,15 @@ export const useTokenStore = create<TokenStore>((set, get) => ({
     };
     set({ tokens: newTokens });
     applyTokensToDOM(newTokens);
+    // Record to local history immediately
+    localHistory.addEntry(sessionId, path, String(previousValue), value, 'user_edit');
+    // Best-effort Firestore sync
     debouncedFirestoreUpdate(sessionId, tokenDocId, path, value, previousValue);
   },
 
   updateTypography: (key, value) => {
     const { tokens, sessionId, tokenDocId, lockedPaths } = get();
-    if (!tokens || !sessionId || !tokenDocId) return;
+    if (!tokens || !sessionId) return;
     const path = `typography.${key}`;
     if (lockedPaths.includes(path)) return;
 
@@ -85,12 +101,13 @@ export const useTokenStore = create<TokenStore>((set, get) => ({
     };
     set({ tokens: newTokens });
     applyTokensToDOM(newTokens);
+    localHistory.addEntry(sessionId, path, String(previousValue), String(value), 'user_edit');
     debouncedFirestoreUpdate(sessionId, tokenDocId, path, value, previousValue);
   },
 
   updateSpacing: (key, value) => {
     const { tokens, sessionId, tokenDocId, lockedPaths } = get();
-    if (!tokens || !sessionId || !tokenDocId) return;
+    if (!tokens || !sessionId) return;
     const path = `spacing.${key}`;
     if (lockedPaths.includes(path)) return;
 
@@ -101,6 +118,7 @@ export const useTokenStore = create<TokenStore>((set, get) => ({
     };
     set({ tokens: newTokens });
     applyTokensToDOM(newTokens);
+    localHistory.addEntry(sessionId, path, String(previousValue), String(value), 'user_edit');
     debouncedFirestoreUpdate(sessionId, tokenDocId, path, value, previousValue);
   },
 

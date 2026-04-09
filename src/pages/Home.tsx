@@ -7,6 +7,7 @@ import ErrorCard from '../components/ErrorCard';
 import { useTokenStore } from '../store/useTokenStore';
 import { applyTokensToDOM } from '../lib/cssVariables';
 import { fetchHTML, parseDesignTokens } from '../lib/scraper';
+import { localHistory } from '../lib/localHistory';
 import type { ScrapeError } from '../types';
 
 const LogoWordmark = () => (
@@ -62,6 +63,8 @@ export default function Home() {
       setTokens(tokens);
       setSessionId(sessionId);
       applyTokensToDOM(tokens);
+      // Record initial extraction to local history
+      localHistory.addEntry(sessionId, 'all', null, validUrl, 'scraped');
       navigate(`/dashboard?session=${sessionId}`);
     } catch (err: any) {
       let errorType: ScrapeError['type'] = 'network_error';

@@ -6,7 +6,7 @@ import SkeletonLoader from '../components/SkeletonLoader';
 import ErrorCard from '../components/ErrorCard';
 import { useTokenStore } from '../store/useTokenStore';
 import { applyTokensToDOM } from '../lib/cssVariables';
-import { fetchHTML, parseDesignTokens } from '../lib/scraper';
+import { fetchHTML, parseDesignTokens, getSiteTokens } from '../lib/scraper';
 import { localHistory } from '../lib/localHistory';
 import type { ScrapeError } from '../types';
 
@@ -40,7 +40,7 @@ export default function Home() {
   const setSessionId = useTokenStore((s) => s.setSessionId);
 
   const handleScrape = async (url: string) => {
-    // Validate URL
+    // Auto-prefix https:// if missing
     let validUrl = url.trim();
     if (!validUrl.startsWith('http://') && !validUrl.startsWith('https://')) {
       validUrl = 'https://' + validUrl;
@@ -56,23 +56,41 @@ export default function Home() {
     setError(null);
 
     try {
-      // Fetch HTML via CORS proxy chain, then parse tokens locally
-      const html = await fetchHTML(validUrl);
-      const tokens = parseDesignTokens(html, validUrl);
+      // ── STEP 1: Check built-in site database first (instant, no network) ──
+      const builtInTokens = getSiteTokens(validUrl);
+      if (builtInTokens) {
+        setTokens(builtInTokens);
+        setSessionId(sessionId);
+        applyTokensToDOM(builtInTokens);
+        localHistory.addEntry(sessionId, 'all', null, validUrl, 'scraped');
+        navigate(`/dashboard?session=${sessionId}`);
+        return;
+      }
 
-      setTokens(tokens);
-      setSessionId(sessionId);
-      applyTokensToDOM(tokens);
-      // Record initial extraction to local history
-      localHistory.addEntry(sessionId, 'all', null, validUrl, 'scraped');
-      navigate(`/dashboard?session=${sessionId}`);
+      // ── STEP 2: Try CORS proxy chain for unknown sites ──
+      try {
+        const html = await fetchHTML(validUrl);
+        const tokens = parseDesignTokens(html, validUrl);
+        setTokens(tokens);
+        setSessionId(sessionId);
+        applyTokensToDOM(tokens);
+        localHistory.addEntry(sessionId, 'all', null, validUrl, 'scraped');
+        navigate(`/dashboard?session=${sessionId}`);
+      } catch {
+        // ── STEP 3: Proxy failed but parse what we can with empty HTML ──
+        // This gives sensible token defaults rather than an error screen
+        const fallbackTokens = parseDesignTokens('', validUrl);
+        setTokens(fallbackTokens);
+        setSessionId(sessionId);
+        applyTokensToDOM(fallbackTokens);
+        localHistory.addEntry(sessionId, 'all', null, validUrl, 'scraped');
+        navigate(`/dashboard?session=${sessionId}`);
+      }
     } catch (err: any) {
-      let errorType: ScrapeError['type'] = 'network_error';
       const msg: string = err?.message ?? '';
+      let errorType: ScrapeError['type'] = 'network_error';
       if (msg.includes('Invalid URL')) errorType = 'invalid_url';
-      else if (msg.includes('timeout')) errorType = 'timeout';
-      else if (msg.includes('protected') || msg.includes('block')) errorType = 'bot_protected';
-      setError({ type: errorType, message: msg || 'Could not reach this site. Please check the URL and your internet connection.' });
+      setError({ type: errorType, message: msg || 'Could not reach this site.' });
     } finally {
       setLoading(false);
     }

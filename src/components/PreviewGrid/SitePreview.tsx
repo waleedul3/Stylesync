@@ -9,8 +9,9 @@ interface Props {
 
 /** Build CSS that overrides the site's colors/fonts with our tokens */
 function buildOverrideCSS(tokens: NonNullable<ReturnType<typeof useTokenStore.getState>['tokens']>): string {
-  const { primary, secondary, accent, background, text } = tokens.colors;
-  const { headingFont, bodyFont } = tokens.typography;
+  const { primary, secondary, accent, background, text, neutrals } = tokens.colors;
+  const { headingFont, bodyFont, baseSize, lineHeight } = tokens.typography;
+  const { unit } = tokens.spacing;
 
   return `
 /* ═══ StyleSync Live Override ═══ */
@@ -20,32 +21,75 @@ function buildOverrideCSS(tokens: NonNullable<ReturnType<typeof useTokenStore.ge
   --color-accent: ${accent} !important;
   --background: ${background} !important;
   --foreground: ${text} !important;
+  --spacing-unit: ${unit}px !important;
+  ${neutrals.map((c, i) => `--neutral-${i}: ${c} !important;`).join('\n  ')}
 }
-html { background: ${background} !important; }
-body { background: ${background} !important; color: ${text} !important; font-family: '${bodyFont}', system-ui, sans-serif !important; }
-h1,h2,h3,h4,h5,h6 { font-family: '${headingFont}', system-ui, sans-serif !important; color: ${text} !important; }
-a:not([class*="btn"]):not([class*="button"]) { color: ${primary} !important; }
-nav, header, [class*="nav"], [class*="header"], [class*="navbar"] { background: ${background} !important; }
-footer, [class*="footer"] { background: ${secondary} !important; color: rgba(255,255,255,0.85) !important; }
+
+html { 
+  font-size: ${baseSize} !important; 
+  background-color: ${background} !important;
+}
+
+body { 
+  background-color: ${background} !important; 
+  color: ${text} !important; 
+  font-family: '${bodyFont}', system-ui, sans-serif !important; 
+  line-height: ${lineHeight} !important;
+}
+
+h1,h2,h3,h4,h5,h6 { 
+  font-family: '${headingFont}', system-ui, sans-serif !important; 
+  color: ${text} !important; 
+}
+
+a:not([class*="btn"]):not([class*="button"]) { 
+  color: ${primary} !important; 
+}
+
+/* Universal Spacing Overrides */
+section, article, nav, footer, header {
+  padding-top: calc(var(--spacing-unit) * 2) !important;
+  padding-bottom: calc(var(--spacing-unit) * 2) !important;
+}
+
+/* Layout Overrides */
+nav, header, [class*="nav"], [class*="header"], [class*="navbar"] { 
+  background-color: ${background} !important; 
+  border-bottom: 1px solid ${secondary}33 !important;
+}
+
+footer, [class*="footer"] { 
+  background-color: ${secondary} !important; 
+  color: #ffffff !important; 
+}
+
 /* Primary CTAs */
 [class*="btn-primary"], [class*="button-primary"], [class*="btn--primary"],
 [class*="cta-"], button[class*="sign"], button[class*="get-start"],
-button[class*="primary"], a[class*="btn-primary"] {
+button[class*="primary"], a[class*="btn-primary"], [class*="Button--primary"] {
   background-color: ${primary} !important;
   border-color: ${primary} !important;
   color: #ffffff !important;
 }
+
 /* Accent highlights */
 [class*="badge"], [class*="tag"], [class*="label"], [class*="pill"],
 [class*="highlight"], [class*="accent"] {
   background-color: ${accent} !important;
   color: #ffffff !important;
 }
+
+/* Specific Amazon/Big Site Overrides */
+#nav-belt, #nav-main { background-color: ${background} !important; }
+#nav-logo-sprites, .nav-logo-link { filter: hue-rotate(180deg); } /* Crude logo color shift */
+.nav-a { color: ${text} !important; }
+
 /* Border colors */
 [class*="border-primary"] { border-color: ${primary} !important; }
+
 /* Background sections */
-[class*="bg-primary"], [class*="section--primary"] { background: ${primary} !important; color: #fff !important; }
-[class*="bg-secondary"], [class*="section--secondary"] { background: ${secondary} !important; color: #fff !important; }
+[class*="bg-primary"], [class*="section--primary"] { background-color: ${primary} !important; color: #ffffff !important; }
+[class*="bg-secondary"], [class*="section--secondary"] { background-color: ${secondary} !important; color: #ffffff !important; }
 `;
 }
 
@@ -57,16 +101,6 @@ function fixRelativeUrls(html: string, baseUrl: string): string {
     .replace(/\bhref="\/(?!\/)/g, `href="${origin}/`)
     .replace(/\baction="\/(?!\/)/g, `action="${origin}/`)
     .replace(/url\(["']?\/(?!\/)/g, `url("${origin}/`);
-}
-
-/** Inject our override CSS just before </head> */
-function injectCSS(html: string, css: string): string {
-  const styleTag = `<style id="__stylesync__">${css}</style>`;
-  // Disable external scripts that may block rendering
-  const safeHtml = html
-    .replace(/<script\b(?![^>]*data-stylesync)[^>]*>/gi, '<script data-stylesync-disabled type="text/javascript-disabled">')
-    .replace(/<\/head>/i, `${styleTag}</head>`);
-  return safeHtml;
 }
 
 type Status = 'idle' | 'loading' | 'ready' | 'error';
@@ -99,23 +133,41 @@ export default function SitePreview({ siteUrl }: Props) {
     if (siteUrl) loadSite();
   }, [siteUrl, loadSite]);
 
-  // ── When tokens change → update the style tag inside the iframe ──
-  useEffect(() => {
-    if (status !== 'ready' || !iframeRef.current || !tokens) return;
+  // ── Inject or update CSS ──
+  const injectOrUpdateCSS = useCallback(() => {
+    if (!iframeRef.current || !tokens) return;
     try {
       const doc = iframeRef.current.contentDocument;
       if (!doc) return;
-      const tag = doc.getElementById('__stylesync__') as HTMLStyleElement | null;
-      if (tag) {
-        tag.textContent = buildOverrideCSS(tokens);
+      
+      let tag = doc.getElementById('__stylesync__') as HTMLStyleElement | null;
+      if (!tag) {
+        tag = doc.createElement('style');
+        tag.id = '__stylesync__';
+        (doc.head || doc.body)?.appendChild(tag);
       }
-    } catch { /* cross-origin safety */ }
-  }, [tokens, status]);
+      tag.textContent = buildOverrideCSS(tokens);
+    } catch (e) {
+      console.error('Failed to inject CSS into preview iframe:', e);
+    }
+  }, [tokens]);
 
-  // Build srcdoc with CSS injected at source (srcdoc = same-origin, so we CAN access contentDocument)
-  const srcdoc = rawHtml && tokens
-    ? injectCSS(rawHtml, buildOverrideCSS(tokens))
-    : undefined;
+  // Update CSS whenever tokens change (reactive update)
+  useEffect(() => {
+    if (status === 'ready') {
+      injectOrUpdateCSS();
+    }
+  }, [tokens, status, injectOrUpdateCSS]);
+
+  // Initial injection when iframe loads
+  const handleIframeLoad = () => {
+    if (status === 'ready') {
+      injectOrUpdateCSS();
+    }
+  };
+
+  // Build srcdoc ONLY when rawHtml changes (prevents reload on token change)
+  const srcdoc = rawHtml ? rawHtml : undefined;
 
   return (
     <div style={{
@@ -212,9 +264,10 @@ export default function SitePreview({ siteUrl }: Props) {
         {/* The real site — rendered via srcdoc (bypasses X-Frame-Options) */}
         {status === 'ready' && srcdoc && (
           <iframe
-            key={siteUrl} /* remount on URL change */
+            key={siteUrl} /* remount ONLY on URL change */
             ref={iframeRef}
             srcDoc={srcdoc}
+            onLoad={handleIframeLoad}
             title={`Preview of ${siteUrl}`}
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
             style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}

@@ -71,7 +71,7 @@ export const useTokenStore = create<TokenStore>((set, get) => ({
 
   updateColor: (key, value) => {
     const { tokens, sessionId, tokenDocId, lockedPaths } = get();
-    if (!tokens || !sessionId) return;
+    if (!tokens) return;  // only need tokens, NOT sessionId
     const path = `colors.${key}`;
     if (lockedPaths.includes(path)) return;
 
@@ -82,15 +82,16 @@ export const useTokenStore = create<TokenStore>((set, get) => ({
     };
     set({ tokens: newTokens });
     applyTokensToDOM(newTokens);
-    // Record to local history immediately
-    localHistory.addEntry(sessionId, path, String(previousValue), value, 'user_edit');
-    // Best-effort Firestore sync
-    debouncedFirestoreUpdate(sessionId, tokenDocId, path, value, previousValue);
+    // Record to history & Firestore only when session exists
+    if (sessionId) {
+      localHistory.addEntry(sessionId, path, String(previousValue), value, 'user_edit');
+      debouncedFirestoreUpdate(sessionId, tokenDocId, path, value, previousValue);
+    }
   },
 
   updateTypography: (key, value) => {
     const { tokens, sessionId, tokenDocId, lockedPaths } = get();
-    if (!tokens || !sessionId) return;
+    if (!tokens) return;
     const path = `typography.${key}`;
     if (lockedPaths.includes(path)) return;
 
@@ -101,13 +102,15 @@ export const useTokenStore = create<TokenStore>((set, get) => ({
     };
     set({ tokens: newTokens });
     applyTokensToDOM(newTokens);
-    localHistory.addEntry(sessionId, path, String(previousValue), String(value), 'user_edit');
-    debouncedFirestoreUpdate(sessionId, tokenDocId, path, value, previousValue);
+    if (sessionId) {
+      localHistory.addEntry(sessionId, path, String(previousValue), String(value), 'user_edit');
+      debouncedFirestoreUpdate(sessionId, tokenDocId, path, value, previousValue);
+    }
   },
 
   updateSpacing: (key, value) => {
     const { tokens, sessionId, tokenDocId, lockedPaths } = get();
-    if (!tokens || !sessionId) return;
+    if (!tokens) return;
     const path = `spacing.${key}`;
     if (lockedPaths.includes(path)) return;
 
@@ -118,8 +121,10 @@ export const useTokenStore = create<TokenStore>((set, get) => ({
     };
     set({ tokens: newTokens });
     applyTokensToDOM(newTokens);
-    localHistory.addEntry(sessionId, path, String(previousValue), String(value), 'user_edit');
-    debouncedFirestoreUpdate(sessionId, tokenDocId, path, value, previousValue);
+    if (sessionId) {
+      localHistory.addEntry(sessionId, path, String(previousValue), String(value), 'user_edit');
+      debouncedFirestoreUpdate(sessionId, tokenDocId, path, value, previousValue);
+    }
   },
 
   setLockedPaths: (paths) => set({ lockedPaths: paths }),

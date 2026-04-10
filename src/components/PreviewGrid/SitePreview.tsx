@@ -14,14 +14,26 @@ function buildOverrideCSS(tokens: NonNullable<ReturnType<typeof useTokenStore.ge
   const { unit } = tokens.spacing;
 
   return `
-/* ═══ StyleSync Live Override ═══ */
+/* ═══ StyleSync Power Override ═══ */
 :root {
-  --color-primary: ${primary} !important;
-  --color-secondary: ${secondary} !important;
-  --color-accent: ${accent} !important;
+  /* StyleSync specific vars */
+  --ss-primary: ${primary} !important;
+  --ss-secondary: ${secondary} !important;
+  --ss-accent: ${accent} !important;
+  --ss-bg: ${background} !important;
+  --ss-text: ${text} !important;
+  --ss-spacing-unit: ${unit}px !important;
+
+  /* Standard/Framework matches (Tailwind, Radix, etc.) */
   --background: ${background} !important;
   --foreground: ${text} !important;
-  --spacing-unit: ${unit}px !important;
+  --bg-color: ${background} !important;
+  --text-color: ${text} !important;
+  --primary: ${primary} !important;
+  --accent: ${accent} !important;
+  --surface: ${background} !important;
+  
+  /* Neutral scale */
   ${neutrals.map((c, i) => `--neutral-${i}: ${c} !important;`).join('\n  ')}
 }
 
@@ -37,9 +49,26 @@ body {
   line-height: ${lineHeight} !important;
 }
 
+/* ── POWER OVERRIDE: Content Areas ── */
+/* Target all major wrappers that usually have their own white background */
+main, [id*="main"], [class*="main"], 
+[id*="content"], [class*="content"], 
+[id*="page"], [class*="page"],
+[id*="wrapper"], [class*="wrapper"],
+article, section, .app-container {
+  background-color: ${background} !important;
+  color: ${text} !important;
+}
+
+/* ── POWER OVERRIDE: Typography ── */
 h1,h2,h3,h4,h5,h6 { 
   font-family: '${headingFont}', system-ui, sans-serif !important; 
   color: ${text} !important; 
+}
+
+/* Target leaf nodes for text color to ensure inheritance doesn't break */
+p, li, span, label, input, textarea, strong, em, td, th, [class*="text-"] {
+  color: ${text} !important;
 }
 
 a:not([class*="btn"]):not([class*="button"]) { 
@@ -48,11 +77,11 @@ a:not([class*="btn"]):not([class*="button"]) {
 
 /* Universal Spacing Overrides */
 section, article, nav, footer, header {
-  padding-top: calc(var(--spacing-unit) * 2) !important;
-  padding-bottom: calc(var(--spacing-unit) * 2) !important;
+  padding-top: calc(var(--ss-spacing-unit) * 2) !important;
+  padding-bottom: calc(var(--ss-spacing-unit) * 2) !important;
 }
 
-/* Layout Overrides */
+/* Layout Elements */
 nav, header, [class*="nav"], [class*="header"], [class*="navbar"] { 
   background-color: ${background} !important; 
   border-bottom: 1px solid ${secondary}33 !important;
@@ -79,9 +108,11 @@ button[class*="primary"], a[class*="btn-primary"], [class*="Button--primary"] {
   color: #ffffff !important;
 }
 
-/* Specific Amazon/Big Site Overrides */
-#nav-belt, #nav-main { background-color: ${background} !important; }
-#nav-logo-sprites, .nav-logo-link { filter: hue-rotate(180deg); } /* Crude logo color shift */
+/* Specific Huge Site Fixes (Amazon, etc.) */
+#a-page, #dp, #dp-container, .celwidget, #nav-belt, #nav-main { 
+  background-color: ${background} !important; 
+}
+#nav-logo-sprites, .nav-logo-link { filter: hue-rotate(180deg) brightness(1.2); }
 .nav-a { color: ${text} !important; }
 
 /* Border colors */

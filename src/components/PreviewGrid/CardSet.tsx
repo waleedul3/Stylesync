@@ -5,7 +5,9 @@ import { SectionHeader } from './ButtonSet';
 export default function CardSet() {
   const tokens = useTokenStore((s) => s.tokens);
   const primary = tokens?.colors.primary ?? '#6366f1';
+  const secondary = tokens?.colors.secondary ?? '#4f46e5';
   const text = tokens?.colors.text ?? '#111827';
+  const bg = tokens?.colors.background ?? '#ffffff';
   const headingFont = tokens?.typography.headingFont ?? 'Inter';
   const bodyFont = tokens?.typography.bodyFont ?? 'Inter';
 
@@ -56,7 +58,7 @@ export default function CardSet() {
       <SectionHeader label="Cards" />
       <div style={{ display: 'flex', gap: '16px' }}>
         {/* Card A — Minimal */}
-        <div style={{ padding: '20px', borderRadius: '10px', flex: 1, background: '#ffffff', border: '1px solid #e5e7eb' }}>
+        <div style={{ padding: '20px', borderRadius: '10px', flex: 1, background: bg, border: `1px solid ${secondary}40` }}>
           <div style={cardTitle}>Minimal Card</div>
           <div style={cardBody}>Clean design with subtle border. Perfect for content-focused layouts and data display.</div>
           <div style={{ marginTop: '16px' }}>
@@ -67,7 +69,7 @@ export default function CardSet() {
         </div>
 
         {/* Card B — Elevated */}
-        <div style={{ padding: '20px', borderRadius: '10px', flex: 1, background: '#ffffff', border: 'none', boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.06)' }}>
+        <div style={{ padding: '20px', borderRadius: '10px', flex: 1, background: bg, border: `1.5px solid ${secondary}`, boxShadow: `0 4px 24px ${secondary}20` }}>
           <div style={cardTitle}>Elevated Card</div>
           <div style={cardBody}>Subtle shadow creates depth. Great for dashboards and interactive content areas.</div>
           <div style={{ marginTop: '16px' }}>

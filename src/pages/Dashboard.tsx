@@ -19,7 +19,6 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const sessionId = searchParams.get('session');
   const tokens = useTokenStore((s) => s.tokens);
-  const setTokens = useTokenStore((s) => s.setTokens);
   const setSessionId = useTokenStore((s) => s.setSessionId);
   const [activeSection, setActiveSection] = useState<'colors' | 'typography' | 'spacing'>('colors');
   const [previewMode, setPreviewMode] = useState<'components' | 'site'>('components');
@@ -55,7 +54,7 @@ export default function Dashboard() {
     );
   }
 
-  const { primary, background, text } = tokens.colors;
+  const { primary, background } = tokens.colors;
 
   return (
     <div style={{ minHeight: '100vh', background: '#0f0f11', display: 'flex', flexDirection: 'column' }}>

@@ -31,7 +31,6 @@ const changeTypeBadges: Record<string, { bg: string; text: string }> = {
 
 export default function VersionHistory() {
   const sessionId = useTokenStore((s) => s.sessionId);
-  const tokens = useTokenStore((s) => s.tokens);
   const updateColor = useTokenStore((s) => s.updateColor);
   const updateTypography = useTokenStore((s) => s.updateTypography);
   const updateSpacing = useTokenStore((s) => s.updateSpacing);

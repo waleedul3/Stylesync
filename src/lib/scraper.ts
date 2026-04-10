@@ -1,30 +1,64 @@
 import axios from 'axios';
 import type { DesignTokens } from '../types';
 
-// ─── CORS PROXY CHAIN ────────────────────────────────────────────────────────
-// Tries each proxy in sequence; first successful HTML response wins.
-const PROXIES = [
+// ─── PROXY HELPERS ───────────────────────────────────────────────────────────
+
+/** Our own Vercel serverless proxy (production) — no CORS, no rate limits */
+const OWN_PROXY = (url: string) => `/api/proxy?url=${encodeURIComponent(url)}`;
+
+/** Public CORS proxies — fallback for local dev */
+const PUBLIC_PROXIES = [
   (url: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
   (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
   (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
-  (url: string) => `https://thingproxy.freeboard.io/fetch/${url}`,
-  (url: string) => `https://cors-anywhere-demo.onrender.com/${url}`,
-  (url: string) => `https://yacdn.org/proxy/${url}`,
-  (url: string) => `https://crossorigin.me/${url}`,
 ];
 
+/** Fetch URL via our own proxy first, then public proxies */
 export async function fetchHTML(url: string): Promise<string> {
-  for (const proxyFn of PROXIES) {
+  // 1. Try own serverless proxy (works in production)
+  try {
+    const res = await axios.get(OWN_PROXY(url), { timeout: 15000 });
+    const html = res.data?.contents ?? res.data;
+    if (typeof html === 'string' && html.length > 200) return html;
+  } catch { /* continue to public proxies */ }
+
+  // 2. Public proxies fallback (for local dev / if own proxy fails)
+  for (const proxyFn of PUBLIC_PROXIES) {
     try {
       const res = await axios.get(proxyFn(url), { timeout: 12000 });
       const html = res.data?.contents ?? res.data;
       if (typeof html === 'string' && html.length > 200) return html;
-    } catch {
-      continue;
-    }
+    } catch { continue; }
   }
+
   throw new Error('All proxies failed — site may block scanners');
 }
+
+/** Fetch raw HTML via own proxy (for site preview — needs full HTML) */
+export async function fetchRawHTML(url: string): Promise<string> {
+  // Own proxy returns raw HTML without wrapping
+  try {
+    const res = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`, {
+      signal: AbortSignal.timeout(15000),
+    });
+    if (res.ok) {
+      const html = await res.text();
+      if (html.length > 200) return html;
+    }
+  } catch { /* fall through */ }
+
+  // Public proxy fallback
+  for (const proxyFn of PUBLIC_PROXIES) {
+    try {
+      const res = await axios.get(proxyFn(url), { timeout: 12000 });
+      const html = res.data?.contents ?? res.data;
+      if (typeof html === 'string' && html.length > 200) return html;
+    } catch { continue; }
+  }
+
+  throw new Error('Could not fetch site HTML');
+}
+
 
 // ─── BUILT-IN DESIGN TOKEN DATABASE ─────────────────────────────────────────
 // Accurate tokens for 30+ popular sites. Used when proxies fail (bot-protected)

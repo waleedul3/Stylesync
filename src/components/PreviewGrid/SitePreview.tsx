@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useTokenStore } from '../../store/useTokenStore';
 import { ExternalLink, Monitor, RefreshCw, AlertTriangle } from 'lucide-react';
 import { fetchRawHTML } from '../../lib/scraper';
@@ -7,16 +7,19 @@ interface Props {
   siteUrl: string | null;
 }
 
-/** Build CSS that overrides the site's colors/fonts with our tokens */
+/** Build CSS that overrides the site's colors/fonts with our tokens (OMEGA MODE) */
 function buildOverrideCSS(tokens: NonNullable<ReturnType<typeof useTokenStore.getState>['tokens']>): string {
-  const { primary, secondary, accent, background, text, neutrals } = tokens.colors;
+  const { primary, secondary, accent, background, text } = tokens.colors;
   const { headingFont, bodyFont, baseSize, lineHeight } = tokens.typography;
-  const { unit } = tokens.spacing;
+  const { unit, scale } = tokens.spacing;
+
+  // Use the 3rd multiplier from the scale for major spacing
+  const majorSpacing = (scale[2] ?? 2) * unit;
+  const minorSpacing = (scale[0] ?? 1) * unit;
 
   return `
-/* ═══ StyleSync Power Override ═══ */
+/* ═══ StyleSync OMEGA Override ═══ */
 :root {
-  /* StyleSync specific vars */
   --ss-primary: ${primary} !important;
   --ss-secondary: ${secondary} !important;
   --ss-accent: ${accent} !important;
@@ -24,103 +27,89 @@ function buildOverrideCSS(tokens: NonNullable<ReturnType<typeof useTokenStore.ge
   --ss-text: ${text} !important;
   --ss-spacing-unit: ${unit}px !important;
 
-  /* Standard/Framework matches (Tailwind, Radix, etc.) */
+  /* CSS Variable Poisoning — Target common variables used by sites */
+  --bg: ${background} !important;
   --background: ${background} !important;
-  --foreground: ${text} !important;
   --bg-color: ${background} !important;
-  --text-color: ${text} !important;
-  --primary: ${primary} !important;
-  --accent: ${accent} !important;
+  --color-bg: ${background} !important;
   --surface: ${background} !important;
   
-  /* Neutral scale */
-  ${neutrals.map((c, i) => `--neutral-${i}: ${c} !important;`).join('\n  ')}
+  --text: ${text} !important;
+  --foreground: ${text} !important;
+  --text-color: ${text} !important;
+  --color-text: ${text} !important;
+  --body-color: ${text} !important;
+  
+  --primary: ${primary} !important;
+  --color-primary: ${primary} !important;
+  --accent: ${accent} !important;
 }
 
-html { 
-  font-size: ${baseSize} !important; 
-  background-color: ${background} !important;
+/* ── OMEGA: Reset anything that blocks background ── */
+* {
+  border-color: ${secondary}33 !important;
+  outline-color: ${primary}66 !important;
 }
 
-body { 
-  background-color: ${background} !important; 
-  color: ${text} !important; 
-  font-family: '${bodyFont}', system-ui, sans-serif !important; 
-  line-height: ${lineHeight} !important;
-}
-
-/* ── POWER OVERRIDE: Content Areas ── */
-/* Target all major wrappers that usually have their own white background */
-main, [id*="main"], [class*="main"], 
-[id*="content"], [class*="content"], 
-[id*="page"], [class*="page"],
-[id*="wrapper"], [class*="wrapper"],
-article, section, .app-container {
+/* ── OMEGA: Universal Background & Text Color ── */
+/* Target almost everything except media and specialized components */
+html, body, div, section, article, main, header, footer, nav, aside,
+p, span, li, u, label, input, textarea, select, table, tr, td, th {
   background-color: ${background} !important;
   color: ${text} !important;
+  border-color: ${secondary}33 !important;
 }
 
-/* ── POWER OVERRIDE: Typography ── */
+/* Specific exclusions (Icons, Images) */
+i, svg, img, video, [class*="icon"], [class*="Icon"] {
+  background-color: transparent !important;
+}
+
+/* ── OMEGA: Typography ── */
+html { font-size: ${baseSize} !important; }
+body { 
+  font-family: '${bodyFont}', system-ui, sans-serif !important; 
+  line-height: ${lineHeight} !important; 
+}
 h1,h2,h3,h4,h5,h6 { 
   font-family: '${headingFont}', system-ui, sans-serif !important; 
   color: ${text} !important; 
 }
 
-/* Target leaf nodes for text color to ensure inheritance doesn't break */
-p, li, span, label, input, textarea, strong, em, td, th, [class*="text-"] {
-  color: ${text} !important;
+/* ── OMEGA: Spacing Explosion ── */
+/* Force margins and paddings on structural elements */
+section, article, [class*="section"], [class*="block"], [id*="content"], main > div {
+  margin-top: ${majorSpacing}px !important;
+  margin-bottom: ${majorSpacing}px !important;
+  padding-top: ${majorSpacing}px !important;
+  padding-bottom: ${majorSpacing}px !important;
 }
 
-a:not([class*="btn"]):not([class*="button"]) { 
-  color: ${primary} !important; 
+p, div > span, li {
+  margin-bottom: ${minorSpacing}px !important;
 }
 
-/* Universal Spacing Overrides */
-section, article, nav, footer, header {
-  padding-top: calc(var(--ss-spacing-unit) * 2) !important;
-  padding-bottom: calc(var(--ss-spacing-unit) * 2) !important;
-}
-
-/* Layout Elements */
-nav, header, [class*="nav"], [class*="header"], [class*="navbar"] { 
-  background-color: ${background} !important; 
-  border-bottom: 1px solid ${secondary}33 !important;
-}
-
-footer, [class*="footer"] { 
-  background-color: ${secondary} !important; 
-  color: #ffffff !important; 
-}
-
-/* Primary CTAs */
-[class*="btn-primary"], [class*="button-primary"], [class*="btn--primary"],
-[class*="cta-"], button[class*="sign"], button[class*="get-start"],
-button[class*="primary"], a[class*="btn-primary"], [class*="Button--primary"] {
+/* ── Common Components ── */
+a { color: ${primary} !important; }
+button, [class*="btn"], [class*="button"] {
   background-color: ${primary} !important;
-  border-color: ${primary} !important;
   color: #ffffff !important;
+  padding: 8px 16px !important;
+  border-radius: 6px !important;
+  border: none !important;
 }
 
-/* Accent highlights */
-[class*="badge"], [class*="tag"], [class*="label"], [class*="pill"],
-[class*="highlight"], [class*="accent"] {
+/* Accent areas */
+[class*="badge"], [class*="tag"], [class*="highlight"], [class*="accent"] {
   background-color: ${accent} !important;
-  color: #ffffff !important;
+  color: #fff !important;
 }
 
-/* Specific Huge Site Fixes (Amazon, etc.) */
+/* Specific Huge Site Fixes */
 #a-page, #dp, #dp-container, .celwidget, #nav-belt, #nav-main { 
   background-color: ${background} !important; 
 }
 #nav-logo-sprites, .nav-logo-link { filter: hue-rotate(180deg) brightness(1.2); }
-.nav-a { color: ${text} !important; }
-
-/* Border colors */
-[class*="border-primary"] { border-color: ${primary} !important; }
-
-/* Background sections */
-[class*="bg-primary"], [class*="section--primary"] { background-color: ${primary} !important; color: #ffffff !important; }
-[class*="bg-secondary"], [class*="section--secondary"] { background-color: ${secondary} !important; color: #ffffff !important; }
 `;
 }
 
@@ -198,7 +187,55 @@ export default function SitePreview({ siteUrl }: Props) {
   };
 
   // Build srcdoc ONLY when rawHtml changes (prevents reload on token change)
-  const srcdoc = rawHtml ? rawHtml : undefined;
+  const srcdoc = useMemo(() => {
+    if (!rawHtml || !tokens) return undefined;
+    
+    const omegaScript = `
+      <script data-stylesync-omega>
+        (function() {
+          const forceStyles = () => {
+            const styleTag = document.getElementById('__stylesync__');
+            if (styleTag && styleTag.parentElement) {
+              // Always move our style tag to the very end of <head> to increase priority
+              if (styleTag.nextElementSibling) {
+                styleTag.parentElement.appendChild(styleTag);
+              }
+            }
+          };
+
+          // Monitor for dynamic changes
+          const observer = new MutationObserver((mutations) => {
+            let shouldSync = false;
+            for (const mutation of mutations) {
+              if (mutation.type === 'childList' || 
+                  (mutation.type === 'attributes' && (mutation.attributeName === 'style' || mutation.attributeName === 'class'))) {
+                shouldSync = true;
+                break;
+              }
+            }
+            if (shouldSync) forceStyles();
+          });
+
+          observer.observe(document.documentElement, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['style', 'class']
+          });
+
+          // Initial run
+          window.addEventListener('load', forceStyles);
+          setInterval(forceStyles, 2000); // Heartbeat sync
+        })();
+      </script>
+    `;
+
+    // Inject our script and initial style tag immediately into the HTML source
+    const initialCSS = buildOverrideCSS(tokens);
+    const headTag = `<style id="__stylesync__">${initialCSS}</style>${omegaScript}`;
+    
+    return rawHtml.replace(/<\/head>/i, `${headTag}</head>`);
+  }, [rawHtml, tokens]);
 
   return (
     <div style={{

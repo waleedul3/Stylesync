@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useTokenStore } from '../../store/useTokenStore';
-import { ExternalLink, Monitor, RefreshCw, AlertTriangle, Zap, CheckCircle2 } from 'lucide-react';
+import { Monitor, RefreshCw, AlertTriangle, Zap } from 'lucide-react';
 import { fetchRawHTML } from '../../lib/scraper';
 
 interface Props {
